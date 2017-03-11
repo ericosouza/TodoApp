@@ -11,8 +11,16 @@ app.config(function($stateProvider, $urlRouterProvider){
 
   $stateProvider.state('new', {
     url: '/new',
-    templateUrl : 'templates/novo.html'
+    templateUrl : 'templates/novo.html',
+    controller: 'NovoCtrl'
   });
+
+  $stateProvider.state('edit',{
+    url: '/edit/:indice',
+    templateUrl: 'templates/novo.html',
+    controller: 'EditCtrl'
+  });
+
   //estado default
   $urlRouterProvider.otherwise('/list');
 });
@@ -31,36 +39,93 @@ app.run(function($ionicPlatform) {
   });
 });
 
-app.controller('ListaCtrl', function($scope){
-  $scope.tarefas = [
-    {
-      "texto":"Realizar as atividades do curso",
-      "data":new Date(),
-      "feita":false
-    },
-    {
-      "texto":"Fazer malas",
-      "data":new Date(),
-      "feita":false
-    },
-    {
-      "texto":"Organizar Documentos",
-      "data":new Date(),
-      "feita":false
-    },
-    {
-      "texto":"Levar a mãe para pegar o trem",
-      "data":new Date(),
-      "feita":false
-    },
-  ];
 
+app.controller('ListaCtrl', function($scope, $state, TarefaService){
+
+  $scope.tarefas = TarefaService.lista();
 
   $scope.concluir = function(indice){
-    $scope.tarefas[indice].feita = true;
+    TarefaService.concluir(indice);
   }
 
   $scope.apagar = function(indice){
-    $scope.tarefas.splice(indice);//splice apaga o indice
+    TarefaService.apagar(indice);
   }
+
+  $scope.editar = function(indice){
+    $state.go('edit',{indice : indice});
+  }
+});
+
+app.controller('NovoCtrl', function($scope, $state, TarefaService){
+  
+  $scope.tarefa = {
+      "texto" : '',
+      "data" : new Date(),
+      "feita" : false
+  };
+
+  $scope.salvar = function(){
+    
+    TarefaService.inserir($scope.tarefa);
+
+    $state.go('list');
+  }
+});
+
+app.controller('EditCtrl', function($scope, $state, $stateParams, TarefaService){
+  
+  $scope.indice = $stateParams.indice;
+
+  $scope.tarefa = angular.copy(TarefaService.obtem($scope.indice));
+
+  $scope.salvar = function(){
+    
+    TarefaService.alterar($scope.indice, $scope.tarefa);
+    
+    $state.go('list');
+  }
+});
+
+//criação de serviços que implementa o crud
+app.factory('TarefaService', function(){
+
+  var tarefas = JSON.parse(window.localStorage.getItem('db_tarefas') || '[]');
+
+  function persistir() {
+    window.localStorage.setItem('db_tarefas', JSON.stringify(tarefas));
+  }
+
+  return {
+
+      lista: function(){
+        return tarefas;
+      },
+
+      obtem: function(indice){
+        return tarefas[indice];
+      },
+
+      inserir: function(tarefa){
+        tarefas.push(tarefa);
+        persistir();
+      },
+
+      alterar: function(indice, tarefa){
+        tarefas[indice] = tarefa;
+        persistir();
+      },
+
+      concluir: function(indice){
+        tarefas[indice].feita = true;
+        persistir();
+      },
+
+      apagar: function(indice){
+        tarefas.splice(indice, 1);
+        persistir();
+      }
+
+  }
+
 });

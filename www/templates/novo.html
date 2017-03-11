@@ -1,5 +1,13 @@
 <ion-view view-title="Novo">
     <ion-content>
-        Tela de Cadastro
+        <ion-list>
+            <label class="item item-input item-stacked-label">
+                <span class="input-label">Tarefa</span>
+                <input ng-model="tarefa.texto" type="text" placeholder="Texto da tarefa"/>
+            </label>
+        </ion-list>
+        <div class="padding">
+            <button ng-click="salvar()" class="button button-block button-balanced">Salvar</button>
+        </div>
     </ion-content>
 </ion-view>
