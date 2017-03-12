@@ -5,6 +5,7 @@ var app = angular.module('todoapp', ['ionic']);
 
 app.config(function($stateProvider, $urlRouterProvider){
   $stateProvider.state('list', {
+    cache: false,
     url: '/list',
     templateUrl : 'templates/lista.html'
   });
@@ -21,8 +22,15 @@ app.config(function($stateProvider, $urlRouterProvider){
     controller: 'EditCtrl'
   });
 
+  $stateProvider.state('login', {
+    url: '/login',
+    pageTitle : 'Login',
+    templateUrl : 'templates/login.html',
+    controller: 'LoginCtrl'
+  });
+
   //estado default
-  $urlRouterProvider.otherwise('/list');
+  $urlRouterProvider.otherwise('/login');
 });
 
 app.run(function($ionicPlatform) {
@@ -40,16 +48,41 @@ app.run(function($ionicPlatform) {
 });
 
 
-app.controller('ListaCtrl', function($scope, $state, TarefaService){
+app.controller('ListaCtrl', function($scope, $state, TarefaService, TarefaWebService){
 
-  $scope.tarefas = TarefaService.lista();
-
+  //$scope.tarefas = TarefaService.lista(); -- para armazenamento local
+  
+  TarefaWebService.lista().then(function(dados){
+    $scope.tarefas = dados;
+  });
+/* LOCAL
   $scope.concluir = function(indice){
     TarefaService.concluir(indice);
   }
+*/
 
+  $scope.concluir = function(indice, tarefa){
+    
+    tarefa.feita = true;
+
+    TarefaWebService.concluir(indice, tarefa).then(function(){
+      TarefaWebService.lista().then(function(dados){
+        $scope.tarefas = dados;
+      });
+    });
+  }
+
+/* LOCAL
   $scope.apagar = function(indice){
     TarefaService.apagar(indice);
+  }
+*/
+  $scope.apagar = function(indice){
+    TarefaWebService.apagar(indice).then(function(){
+      TarefaWebService.lista().then(function(dados){
+        $scope.tarefas = dados;
+      });
+    });
   }
 
   $scope.editar = function(indice){
@@ -57,6 +90,7 @@ app.controller('ListaCtrl', function($scope, $state, TarefaService){
   }
 });
 
+/* armazenamento LOCAL
 app.controller('NovoCtrl', function($scope, $state, TarefaService){
   
   $scope.tarefa = {
@@ -72,7 +106,25 @@ app.controller('NovoCtrl', function($scope, $state, TarefaService){
     $state.go('list');
   }
 });
+*/
 
+app.controller('NovoCtrl', function($scope, $state, TarefaWebService){
+  
+  $scope.tarefa = {
+      "texto" : '',
+      "data" : new Date(),
+      "feita" : false
+  };
+
+  $scope.salvar = function(){
+    
+    TarefaWebService.inserir($scope.tarefa).then(function(){
+      $state.go('list');
+    });
+  }
+});
+
+/* armazenamento local
 app.controller('EditCtrl', function($scope, $state, $stateParams, TarefaService){
   
   $scope.indice = $stateParams.indice;
@@ -86,8 +138,63 @@ app.controller('EditCtrl', function($scope, $state, $stateParams, TarefaService)
     $state.go('list');
   }
 });
+*/
 
-//criação de serviços que implementa o crud
+
+app.controller('EditCtrl', function($scope, $state, $stateParams, TarefaWebService){
+  
+  $scope.indice = $stateParams.indice;
+
+  TarefaWebService.obtem($scope.indice).then(function(dados){
+    $scope.tarefa = dados;
+  });
+
+  $scope.salvar = function(){
+    
+    TarefaWebService.alterar($scope.indice, $scope.tarefa).then(function(){
+      $state.go('list');
+    });
+  }
+});
+
+
+
+
+app.controller('LoginCtrl', function($scope, $http, $state, $ionicHistory, $ionicPopup){
+
+  $scope.usuario = {};
+
+  $scope.login = function() {
+
+    $http.post('http://ericonode.azurewebsites.net/api/usuario', $scope.usuario)
+      .then(function(response) {
+
+          if(response.status == 200){
+            window.localStorage.setItem('usuario', JSON.stringify(response.data));
+
+            $ionicHistory.nextViewOptions({
+              disableBack: true
+            });
+
+            $state.go('list');
+
+          }
+
+      }, function(response) {
+        $ionicPopup.alert(
+          {
+            title: 'Falha no acesso',
+            template: 'Usuário inválido'
+          }
+        );
+      });
+
+  }
+});
+
+
+
+//criação de serviços que implementa o crud em um json local
 app.factory('TarefaService', function(){
 
   var tarefas = JSON.parse(window.localStorage.getItem('db_tarefas') || '[]');
@@ -124,6 +231,88 @@ app.factory('TarefaService', function(){
       apagar: function(indice){
         tarefas.splice(indice, 1);
         persistir();
+      }
+
+  }
+
+});
+
+
+app.factory('TarefaWebService', function($http, $q){
+
+  var url = 'http://ericonode.azurewebsites.net/api/tarefa';
+
+  var config = {
+    headers : {'Authorization':JSON.parse(window.localStorage.getItem('usuario'))}
+  }
+
+  return {
+
+      lista: function(){
+        
+        var deferido = $q.defer();
+        /* como é assincrono, o then significa que 
+        quando o servidor retornar a minha lista de tarefas
+        a partir dessa chamada, então ele vai executar a função, 
+        tendo como parametro o response que é o retorno do servidor*/
+        $http.get(url, config).then(function(response){
+          deferido.resolve(response.data);//data => dados do server
+        });
+        
+        return deferido.promise;
+      },
+
+      obtem: function(id){
+        
+        var deferido = $q.defer();
+
+        $http.get(url + '/'+ id).then(function(response){
+          deferido.resolve(response.data);
+        });
+
+        return deferido.promise;
+      },
+
+      inserir: function(tarefa){
+        
+        var deferido = $q.defer();
+        
+        $http.post(url, tarefa).then(function(){
+          deferido.resolve();
+        });
+        
+        return deferido.promise;
+      },
+
+      alterar: function(id, tarefa){
+        
+        var deferido = $q.defer();
+
+        $http.put(url + '/' + id, tarefa).then(function(){
+          deferido.resolve();
+        });
+
+        return deferido.promise;
+      },
+
+      concluir: function(id, tarefa){
+        var deferido = $q.defer();
+
+        $http.put(url + '/' + id, tarefa).then(function(){
+          deferido.resolve();
+        });
+
+        return deferido.promise;
+      },
+
+      apagar: function(id){
+        var deferido = $q.defer();
+
+        $http.delete(url + '/' + id).then(function(){
+          deferido.resolve();
+        });
+
+        return deferido.promise;
       }
 
   }
